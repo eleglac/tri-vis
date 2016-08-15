@@ -7,13 +7,18 @@
 (def hsb-max 100)
 (def tri-size 40)
 
+(defn intensity [t]
+  (let [duration 8000
+        scale    (/ duration q/PI)]
+    (Math/pow (Math/sin (/ t scale)) 2)))
+
 (defn color-magix 
   "Takes three points and sets the fill to a color... somehow."
   [[x1 y1] [x2 y2] [x3 y3]]
   
   (let [skew (mod (q/frame-count) hsb-max)
         hue  (mod (+ skew x1 y1 y2) hsb-max)
-        sat  hsb-max
+        sat  (* hsb-max (intensity (q/millis)))
         vlu  hsb-max
         alph hsb-max]
   (q/fill hue sat vlu alph)))
