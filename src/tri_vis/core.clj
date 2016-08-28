@@ -4,17 +4,27 @@
             [quil.middleware :as m]))
 
 (def hsb-max 100)
-(def tri-size 64)
+(def tri-size 40)
 
 (defn intensity 
-  "Given an input time in milliseconds, generate a float representing a
-  percentage of some maximal value.  Currently the float is generated using
+  "Given an input representing time as either frames (from frame-count) or 
+  milliseconds (millis), generate a float representing a percentage of some 
+  maximal value.  Currently the float is generated using
   a sin(x)^2 function but any continuous periodic function should work."
   [t]
 
-  (let [duration 8000
+  (let [duration 40000 ;remember to scale correctly, currently assumes ms
         scale    (/ duration q/PI)]
     (Math/pow (Math/sin (/ t scale)) 2)))
+
+(defn skew 
+  "Utility function to be used by define-color.  Takes a scaling factor
+  and some number of coordinate points and returns the float representing
+  the Perlin noise at that point.  Maybe not that useful but ehhh"
+  
+  ([] 0.0)
+  ([scale] (* (q/noise 0) scale))
+  ([scale & points] (apply q/noise (map #(* %1 scale) (take 3 points)))))
 
 (defn define-color 
   "Given three points (which ostensibly represent the corners of a triangle),
@@ -22,12 +32,13 @@
   This can be done in many ways."
   [[x1 y1] [x2 y2] [x3 y3]]
   
-  (let [skew (mod (q/frame-count) hsb-max)
-        hue  (mod (+ skew x1 y1 y2) hsb-max)
-        sat  (* hsb-max (intensity (q/millis)))
-        vlu  hsb-max
-        alph hsb-max]
-  (q/color hue sat vlu alph)))
+  (let [position-delta (skew 0.001 x1 x2 y3)
+        time-delta     (intensity (q/millis))
+        hue            (mod (+ (* time-delta hsb-max) (* position-delta hsb-max)) 100)
+        saturation     hsb-max 
+        brightness     hsb-max 
+        alpha          hsb-max]
+  (q/color hue saturation brightness alpha)))
 
 (defn get-corners
   "Create a list of [x y] corresponding to the corners of equilateral 
@@ -67,7 +78,7 @@
   []
 
   (q/color-mode :hsb hsb-max)
-  (q/frame-rate 30) 
+  (q/frame-rate 25) 
   (q/background hsb-max)
   (q/no-stroke)
  
@@ -96,6 +107,8 @@
   :update     update-state
   :draw       draw-state
   :size       :fullscreen
+  :features   [:keep-on-top]
+  :renderer   :opengl
   :middleware [m/fun-mode])
 
 (defn -main [] nil)
