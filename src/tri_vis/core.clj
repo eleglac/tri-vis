@@ -5,7 +5,7 @@
 
 (def fr       60)
 (def hsb-max  100)
-(def tri-size 40)
+(def tri-size 20)
 
 (defn intensity 
   "Given an input representing time as either frames (from frame-count) or 
@@ -74,18 +74,17 @@
     (draw-tri p1 p2 p3)))
 
 (defn setup 
-  "Besides establishing basic environmental parameters (color-mode, frame-rate,
-  and background), a list of the screen-tiling triangles is generated"
+  "Establishes basic environmental parameters (color-mode, frame-rate,
+  and background)."
   []
 
   (q/color-mode :hsb hsb-max)
-  (q/frame-rate 30) 
+  (q/frame-rate fr) 
   (q/background hsb-max)
   (q/no-stroke))
 
 (defn update-state
-  "Currently does nothing but pass through current state, which is the list of 
-  triangles as created in (setup).  
+  "If triangles are present, pass them through; otherwise, create them.  
   update-state could potentially change the position of the triangle
   corners to allow for more interesting visual effects."
   [state]
@@ -121,13 +120,9 @@
   :setup      setup
   :update     update-state
   :draw       draw-state  
-  :size       :fullscreen  ;error may be due to thread blocking????
-  ;:size       [640 480]
+  :size       :fullscreen  
   :renderer   :p2d
   :features   [:keep-on-top]
-  :middleware [m/fun-mode]
-  
-
-  )
+  :middleware [m/fun-mode])
 
 (defn -main [] nil)
