@@ -3,7 +3,8 @@
             [quil.core :as q]
             [quil.middleware :as m]))
 
-(def hsb-max 100)
+(def fr       60)
+(def hsb-max  100)
 (def tri-size 40)
 
 (defn intensity 
@@ -13,7 +14,7 @@
   a sin(x)^2 function but any continuous periodic function should work."
   [t]
 
-  (let [duration 40000 ;remember to scale correctly, currently assumes ms
+  (let [duration 30000 ;remember to scale correctly, currently assumes ms
         scale    (/ duration q/PI)]
     (Math/pow (Math/sin (/ t scale)) 2)))
 
@@ -35,8 +36,8 @@
   (let [position-delta (skew 0.001 x1 x2 y3)
         time-delta     (intensity (q/millis))
         hue            (mod (+ (* time-delta hsb-max) (* position-delta hsb-max)) 100)
-        saturation     hsb-max 
-        brightness     hsb-max 
+        saturation     (+ (* 80 position-delta) (* 20 time-delta)) 
+        brightness     (+ (* 20 position-delta) (* 80 time-delta)) 
         alpha          hsb-max]
   (q/color hue saturation brightness alpha)))
 
@@ -62,7 +63,7 @@
   the triangle points) and then draws a triangle."
   [[x1 y1] [x2 y2] [x3 y3]]
 
-  (q/fill (define-color [x1 y1] [x2 y2] [x3 y3])) 
+  (q/fill (define-color [x1 y1] [x2 y2] [x3 y3]))
   (q/triangle x1 y1 x2 y2 x3 y3))
 
 (defn draw-tris 
@@ -78,11 +79,9 @@
   []
 
   (q/color-mode :hsb hsb-max)
-  (q/frame-rate 25) 
+  (q/frame-rate 30) 
   (q/background hsb-max)
-  (q/no-stroke)
- 
-  {:tris (triangulate (get-corners tri-size))})
+  (q/no-stroke))
 
 (defn update-state
   "Currently does nothing but pass through current state, which is the list of 
@@ -91,24 +90,43 @@
   corners to allow for more interesting visual effects."
   [state]
 
-  state)
+;; In previous versions, all triangles were calculated in (setup).
+;; However, since this means (draw) is delayed until the calcs are finished,
+;; JOGL would often assume that the thread was blocked and throw an exception.
+;; I suppose I could just catch the exception, but we'll try this first.
+
+  (if (empty? state)
+    {:tris (triangulate (get-corners tri-size))}
+    state))
 
 (defn draw-state
   "Actually render the triangles!"
   [state]
 
   (q/background 100)
+  (q/fill 0)
 
-  (draw-tris (:tris state)))
+;; the following check stems from the fact that state will not be
+;; initialized until after draw-state completes its first pass.
+;; see note with (update-state) for more info about why this hacky
+;; bullshit is here.
+
+  (if (empty? state)
+    (q/text "loading" (/ (q/width) 2) (/ (q/height) 2))
+    (draw-tris (:tris state))))
 
 (q/defsketch image-site
   :title      "Triangles"
   :setup      setup
   :update     update-state
-  :draw       draw-state
-  :size       :fullscreen
+  :draw       draw-state  
+  :size       :fullscreen  ;error may be due to thread blocking????
+  ;:size       [640 480]
+  :renderer   :p2d
   :features   [:keep-on-top]
-  :renderer   :opengl
-  :middleware [m/fun-mode])
+  :middleware [m/fun-mode]
+  
+
+  )
 
 (defn -main [] nil)
