@@ -94,6 +94,7 @@
 ;; However, since this means (draw) is delayed until the calcs are finished,
 ;; JOGL would often assume that the thread was blocked and throw an exception.
 ;; I suppose I could just catch the exception, but we'll try this first.
+;; ref: https://github.com/processing/processing/issues/4468
 
   (if (empty? state)
     {:tris (triangulate (get-corners tri-size))}
