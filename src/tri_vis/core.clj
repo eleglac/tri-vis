@@ -1,21 +1,22 @@
 (ns tri-vis.core
-  (:require [delaunay-triangulation.core :refer [triangulate]] 
-            [quil.core :as q]
+  (:require [quil.core :as q]
             [quil.middleware :as m]))
 
-(def fr       60)
-(def hsb-max  100)
-(def tri-size 20)
+(def fr         60)
+(def hsb-max    100)
+(def tri-base   27)
+(def tri-height (* tri-base (Math/sqrt 3)))
 
 (defn intensity 
   "Given an input representing time as either frames (from frame-count) or 
   milliseconds (millis), generate a float representing a percentage of some 
   maximal value.  Currently the float is generated using
-  a sin(x)^2 function but any continuous periodic function should work."
+  a sin(x)^2 function but any continuous function should work."
   [t]
 
   (let [duration 30000 ;remember to scale correctly, currently assumes ms
         scale    (/ duration q/PI)]
+
     (Math/pow (Math/sin (/ t scale)) 2)))
 
 (defn skew 
@@ -33,29 +34,53 @@
   This can be done in many ways."
   [[x1 y1] [x2 y2] [x3 y3]]
   
-  (let [position-delta (skew 0.001 x1 x2 y3)
-        time-delta     (intensity (q/millis))
-        hue            (mod (+ (* time-delta hsb-max) (* position-delta hsb-max)) 100)
-        saturation     (+ (* 80 position-delta) (* 20 time-delta)) 
-        brightness     (+ (* 20 position-delta) (* 80 time-delta)) 
+  (let [;; periodic change based on time elapsed
+        time-delta-p   (intensity (q/millis))
+        ;; continuously variable change based on time elapsed 
+        time-delta-cv  (skew 0.004   (q/frame-count)) 
+        ;; static change based on location of triangle
+        position-delta (skew 0.00045 (+ x1 x2 x3) 
+                                     (+ y1 y2 y3))
+        ;; composite change, based both on position and time  
+        cvt-pos-delta  (skew 0.00035 (q/frame-count) 
+                                     (+ x1 x2 x3) 
+                                     (+ y1 y2 y3))
+        ;; actual parameter construction - keep between 0 and 100
+        hue            (mod (+ (* hsb-max cvt-pos-delta) 
+                               (* hsb-max time-delta-cv) 
+                               (* hsb-max time-delta-p)) 100)
+        saturation     (+ (* 80 position-delta) (* 20 time-delta-p)) 
+        brightness     (+ (* 20 position-delta) (* 80 time-delta-p)) 
         alpha          hsb-max]
+
   (q/color hue saturation brightness alpha)))
+
+(defn triangulate
+  "Rolled my own triangulation function based on the assumption that I'll
+  always want equilateral triangles.  For other kinds of triangle tilings,
+  need more math (or Delaunay triangulation!)
+  Note: f should be either (+) or (-) for best results."
+  [f [x y]]
+
+  [[x                       y] 
+   [(+ x tri-base)          (f y tri-height)] 
+   [(+ x tri-base tri-base) y]])
 
 (defn get-corners
   "Create a list of [x y] corresponding to the corners of equilateral 
   triangles which tile the visible window. n is one-half the base length of 
   a single triangle (in pixels), and in effect sets the scale of the tiling."
-  [n]
+  []
   
-  (let [offset-x (* 2 n) 
-        offset-y (* n (Math/sqrt 3))
+  (let [offset-x (* 2 tri-base) 
+        offset-y tri-height
 
         cols (+ 3 (* 2 (/ (q/width) offset-x)))
         rows (Math/floor (/ (q/height) offset-y))]
 
     (for [i (range (inc cols)) 
           j (range (inc rows))]
-      [(- (* i n) offset-x)                            
+      [(- (* i tri-base) offset-x)                            
        (* (+ (* j 2) (mod i 2)) offset-y)])))
 
 (defn draw-tri 
@@ -70,7 +95,7 @@
   "Essentially just a wrapper for repeated calls to draw-tri."
   [tris]
 
-  (doseq [[p1 p2 p3] (map identity (:triangles tris))] 
+  (doseq [[p1 p2 p3] (map identity tris)] 
     (draw-tri p1 p2 p3)))
 
 (defn setup 
@@ -81,39 +106,34 @@
   (q/color-mode :hsb hsb-max)
   (q/frame-rate fr) 
   (q/background hsb-max)
-  (q/no-stroke))
+  (q/no-stroke)
+
+;; All triangles are calculated in (setup).
+;; However, since this means (draw) is delayed until the calcs are finished,
+;; JOGL might assume that the thread is blocked and throw an exception.
+;; I suppose I could just catch the exception, but we'll try this first.
+;; ref: https://github.com/processing/processing/issues/4468
+  
+  (let [corners (get-corners)
+        up-tris (map (partial triangulate -) corners)
+        dn-tris (map (partial triangulate +) corners)]
+    {:tris (concat up-tris dn-tris)}))
 
 (defn update-state
-  "If triangles are present, pass them through; otherwise, create them.  
+  "Pass-through.
+
   update-state could potentially change the position of the triangle
   corners to allow for more interesting visual effects."
   [state]
 
-;; In previous versions, all triangles were calculated in (setup).
-;; However, since this means (draw) is delayed until the calcs are finished,
-;; JOGL would often assume that the thread was blocked and throw an exception.
-;; I suppose I could just catch the exception, but we'll try this first.
-;; ref: https://github.com/processing/processing/issues/4468
-
-  (if (empty? state)
-    {:tris (triangulate (get-corners tri-size))}
-    state))
+  state)
 
 (defn draw-state
   "Actually render the triangles!"
   [state]
 
   (q/background 100)
-  (q/fill 0)
-
-;; the following check stems from the fact that state will not be
-;; initialized until after draw-state completes its first pass.
-;; see note with (update-state) for more info about why this hacky
-;; bullshit is here.
-
-  (if (empty? state)
-    (q/text "loading" (/ (q/width) 2) (/ (q/height) 2))
-    (draw-tris (:tris state))))
+  (draw-tris (:tris state)))
 
 (q/defsketch image-site
   :title      "Triangles"
